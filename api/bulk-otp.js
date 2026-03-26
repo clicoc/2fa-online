@@ -3,7 +3,7 @@ export default async function handler(req) {
   const chunks = [
     '<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1.0">',
-    '<title>Bulk 2FA Authenticator | 高效批量在线验证器</title>',
+    '<title>Bulk 2FA Authenticator | 高效批量2FA在线验证器</title>',
     '<meta name="description" content="专为多账号管理设计的批量 2FA 验证工具。支持从 Excel/TXT 直接粘贴邮箱和密钥，纯本地安全计算，一页显示数百个验证码。">',
     '<meta name="keywords" content="批量2FA, 批量OTP, 验证码生成器, 多账号管理, Google Authenticator 批量, 在线身份验证器">',
     '<meta property="og:title" content="Bulk 2FA - 高效多账号验证码管理">',

@@ -3,112 +3,161 @@ export const config = {
 };
 
 export default async function handler(request) {
+  const url = new URL(request.url);
+  const method = request.method;
+
+  let secret = "";
+  if (method === "POST") {
+    try {
+      const formData = await request.formData();
+      secret = formData.get("secret");
+    } catch (e) {}
+  } else {
+    secret = url.searchParams.get('secret') || url.pathname.split('/').pop();
+  }
+
+  if (secret) {
+    secret = decodeURIComponent(secret).trim().replace(/\s+/g, '');
+  }
+
+  let otp = "";
+  let isResultPage = false;
+  // 排除掉 /bulk 路径，防止单账号逻辑误吞批量页
+  if (secret && !['get-otp', '/', 'favicon.ico', 'bulk'].includes(secret)) {
+    try {
+      otp = await generateOTP(secret);
+      isResultPage = true;
+    } catch (e) {
+      secret = ""; 
+    }
+  }
+
   const htmlContent = `<!DOCTYPE html>
     <html lang="zh-CN">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Bulk 2FA Authenticator</title>
-      <script src="https://cdn.jsdelivr.net/npm/otpauth@9.1.4/dist/otpauth.umd.min.js"></script>
+      <title>2FA Authenticator</title>
       <style>
         :root { --primary: #4361ee; --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-gradient); min-height: 100vh; margin: 0; display: flex; justify-content: center; padding: 40px 20px; color: #2d3436; box-sizing: border-box; }
-        .container { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); padding: 2rem; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); width: 100%; max-width: 800px; }
-        h1 { font-size: 1.5rem; text-align: center; color: #636e72; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 1px; }
-        textarea { width: 100%; height: 150px; padding: 15px; border: 2px solid #dfe6e9; border-radius: 12px; font-size: 0.9rem; box-sizing: border-box; outline: none; background: rgba(255,255,255,0.5); font-family: monospace; transition: all 0.3s; }
-        textarea:focus { border-color: var(--primary); background: white; }
-        button { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 12px; font-size: 1rem; cursor: pointer; width: 100%; font-weight: 600; margin: 20px 0; transition: transform 0.2s; }
-        button:active { transform: scale(0.98); }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
-        th { background: #f8f9fa; color: #636e72; font-size: 0.85rem; padding: 12px; text-transform: uppercase; }
-        td { padding: 15px; text-align: center; border-bottom: 1px solid #f1f2f6; font-size: 0.95rem; }
-        .code { font-size: 1.4rem; font-weight: 800; color: var(--primary); cursor: pointer; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
-        .remain { color: #e74c3c; font-weight: bold; width: 80px; }
-        .back-link { display: block; text-align: center; margin-top: 20px; color: #b2bec3; text-decoration: none; font-size: 0.8rem; opacity: 0.8; }
-        .back-link:hover { color: var(--primary); }
-        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 25px; font-size: 0.85rem; display: none; z-index: 100; }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-gradient); height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; color: #2d3436; overflow: hidden; }
+        .container { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); padding: 2.5rem; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); width: 90%; max-width: 400px; text-align: center; }
+        h1 { font-size: 1.1rem; margin-bottom: 1.5rem; color: #636e72; text-transform: uppercase; letter-spacing: 1px; }
+        
+        input[type="text"] { width: 100%; padding: 14px; margin-bottom: 15px; border: 2px solid #dfe6e9; border-radius: 12px; font-size: 1rem; box-sizing: border-box; outline: none; transition: all 0.3s; background: rgba(255,255,255,0.5); }
+        input[type="text"]:focus { border-color: var(--primary); background: white; }
+        .btn-submit { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 12px; font-size: 1rem; cursor: pointer; width: 100%; font-weight: 600; transition: transform 0.2s, opacity 0.3s; }
+        
+        .otp-display { font-size: 3.5rem; font-weight: 800; color: var(--primary); margin: 0.5rem 0; cursor: pointer; transition: transform 0.2s; letter-spacing: 4px; font-variant-numeric: tabular-nums; }
+        .progress-container { height: 8px; background: #dfe6e9; border-radius: 4px; margin: 1.5rem 0; overflow: hidden; }
+        #progress-bar { height: 100%; background: var(--primary); width: 100%; transition: width 0.1s linear; }
+        
+        .footer-info { font-size: 0.7rem; color: #b2bec3; margin-top: 1.5rem; word-break: break-all; opacity: 0.7; }
+        .nav-links { margin-top: 12px; border-top: 1px dashed #dfe6e9; padding-top: 12px; }
+        .sub-link { color: #b2bec3; text-decoration: none; font-size: 0.7rem; transition: color 0.3s; opacity: 0.6; margin: 0 8px; }
+        .sub-link:hover { color: var(--primary); opacity: 1; }
+
+        .toast { position: fixed; bottom: 30px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 25px; font-size: 0.85rem; display: none; z-index: 100; }
       </style>
     </head>
     <body>
       <div class="container">
-        <h1 id="title">Bulk 2FA</h1>
-        <p id="tip" style="font-size: 0.8rem; color: #95a5a6; margin-bottom: 10px;">Format: Account [Space/Tab] Secret</p>
-        <textarea id="inputBox" placeholder="Example:\nGoogleValue JBSWY3DPEHPK3PXP\nMyAccount 4S6C7G..."></textarea>
-        <button onclick="loadAccounts()" id="btn-text">Generate All</button>
-        <table id="resultTable" style="display:none;">
-          <thead>
-            <tr>
-              <th id="th-acc">Account</th>
-              <th id="th-code">OTP (Click)</th>
-              <th id="th-time">Left</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody"></tbody>
-        </table>
-        <a href="/" class="back-link" id="back-text">← Single OTP Mode</a>
+        <h1 id="title">2FA Authenticator</h1>
+        
+        ${!isResultPage ? `
+          <form method="POST">
+            <input type="text" name="secret" placeholder="Paste Secret here..." required autocomplete="off">
+            <button type="submit" class="btn-submit" id="btn-text">Generate Code</button>
+          </form>
+          <div class="nav-links">
+            <a href="/bulk" class="sub-link" id="bulk-entry">Bulk Mode</a>
+          </div>
+        ` : `
+          <div class="otp-display" id="otp" title="点击复制">${otp}</div>
+          <div class="progress-container"><div id="progress-bar"></div></div>
+          <p id="expiry-text" style="font-size: 0.9rem; font-weight: 500; margin:0;">
+            <span id="label-text">Expiring in</span> <span id="timer" style="color:#e74c3c">30</span>s
+          </p>
+          <div class="footer-info">
+            Secret: ${secret}
+            <div class="nav-links">
+              <a href="/" class="sub-link" id="back-text">← New Secret</a>
+              <a href="/bulk" class="sub-link" id="bulk-entry2">Bulk Mode</a>
+            </div>
+          </div>
+        `}
       </div>
       <div id="toast" class="toast">Copied!</div>
+
       <script>
         const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
         const i18n = {
-          zh: { title: '批量验证码生成', btn: '开始生成', thAcc: '账号', thCode: '验证码 (点击复制)', thTime: '剩余', toast: '已复制', tip: '格式：账号 [空格/Tab] 密钥', back: '← 单账号模式' },
-          en: { title: 'Bulk 2FA', btn: 'Generate All', thAcc: 'Account', thCode: 'OTP (Click)', thTime: 'Left', toast: 'Copied', tip: 'Format: Account [Space/Tab] Secret', back: '← Single OTP Mode' }
+          zh: { title: '2FA 验证器', btn: '生成验证码', placeholder: '在此粘贴密钥...', label: '将在', suffix: '秒后过期', toast: '已复制', back: '← 输入新密钥', bulk: '批量模式' },
+          en: { title: '2FA Authenticator', btn: 'Generate Code', placeholder: 'Paste Secret here...', label: 'Expiring in', suffix: 's', toast: 'Copied', back: '← New Secret', bulk: 'Bulk Mode' }
         };
-        document.getElementById('title').innerText = i18n[lang].title;
-        document.getElementById('btn-text').innerText = i18n[lang].btn;
-        document.getElementById('tip').innerText = i18n[lang].tip;
-        document.getElementById('th-acc').innerText = i18n[lang].thAcc;
-        document.getElementById('th-code').innerText = i18n[lang].thCode;
-        document.getElementById('th-time').innerText = i18n[lang].thTime;
-        document.getElementById('back-text').innerText = i18n[lang].back;
 
-        let accounts = [];
-        function loadAccounts() {
-          const lines = document.getElementById("inputBox").value.trim().split("\\n");
-          accounts = [];
-          for (let line of lines) {
-            let parts = line.trim().split(/\\s+|\\t/).filter(x => x);
-            if (parts.length < 2) continue;
-            try {
-              const name = parts[0];
-              const secret = parts[1].trim().toUpperCase().replace(/\\s+/g, '');
-              const totp = new OTPAuth.TOTP({ algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(secret) });
-              accounts.push({ name, totp });
-            } catch (e) { console.error("Invalid Secret for:", parts[0]); }
+        document.getElementById('title').innerText = i18n[lang].title;
+        if(document.getElementById('btn-text')) document.getElementById('btn-text').innerText = i18n[lang].btn;
+        if(document.getElementsByName('secret')[0]) document.getElementsByName('secret')[0].placeholder = i18n[lang].placeholder;
+        if(document.getElementById('back-text')) document.getElementById('back-text').innerText = i18n[lang].back;
+        if(document.getElementById('bulk-entry')) document.getElementById('bulk-entry').innerText = i18n[lang].bulk;
+        if(document.getElementById('bulk-entry2')) document.getElementById('bulk-entry2').innerText = i18n[lang].bulk;
+
+        const otpEl = document.getElementById('otp');
+        if (otpEl) {
+          function update() {
+            const now = Math.floor(Date.now() / 1000);
+            const timeLeft = 30 - (now % 30);
+            document.getElementById('timer').innerText = timeLeft;
+            document.getElementById('label-text').innerText = i18n[lang].label;
+            document.getElementById('timer').nextSibling.textContent = i18n[lang].suffix;
+            document.getElementById('progress-bar').style.width = (timeLeft / 30 * 100) + '%';
+            if (timeLeft === 30) location.reload();
           }
-          if (accounts.length > 0) {
-            document.getElementById("resultTable").style.display = "table";
-            updateTable();
-          }
+          setInterval(update, 1000);
+          update();
+          otpEl.onclick = function() {
+            navigator.clipboard.writeText(this.innerText).then(() => {
+              const toast = document.getElementById('toast');
+              toast.innerText = i18n[lang].toast + ": " + this.innerText;
+              toast.style.display = 'block';
+              setTimeout(() => toast.style.display = 'none', 2000);
+            });
+          };
         }
-        function updateTable() {
-          const tbody = document.getElementById("tableBody");
-          const remain = 30 - (Math.floor(Date.now() / 1000) % 30);
-          tbody.innerHTML = "";
-          for (let acc of accounts) {
-            const code = acc.totp.generate();
-            const tr = document.createElement('tr');
-            tr.innerHTML = \`<td style="color:#636e72">\${acc.name}</td>
-                            <td class="code" onclick="copyText('\${code}')">\${code}</td>
-                            <td class="remain">\${remain}s</td>\`;
-            tbody.appendChild(tr);
-          }
-          if(remain === 30) setTimeout(updateTable, 500);
-        }
-        function copyText(txt) {
-          navigator.clipboard.writeText(txt).then(() => {
-            const t = document.getElementById("toast");
-            t.innerText = i18n[lang].toast + ": " + txt;
-            t.style.display = "block";
-            setTimeout(() => t.style.display = "none", 2000);
-          });
-        }
-        setInterval(() => { if(accounts.length > 0) updateTable(); }, 1000);
       </script>
     </body>
-    </html>\`;
+    </html>`;
 
   return new Response(htmlContent, {
     headers: { "Content-Type": "text/html; charset=UTF-8", "Cache-Control": "no-store" },
   });
+}
+
+// --- TOTP 核心算法保持不变 ---
+async function generateOTP(secret) {
+  const epochTime = Math.floor(Date.now() / 1000);
+  const timeStep = 30;
+  let counter = Math.floor(epochTime / timeStep);
+  const counterBytes = new Uint8Array(8);
+  for (let i = 7; i >= 0; i--) { counterBytes[i] = counter & 255; counter >>>= 8; }
+  const key = await crypto.subtle.importKey("raw", base32toByteArray(secret), { name: "HMAC", hash: { name: "SHA-1" } }, false, ["sign"]);
+  const hmacBuffer = await crypto.subtle.sign("HMAC", key, counterBytes.buffer);
+  const hmacArray = Array.from(new Uint8Array(hmacBuffer));
+  const offset = hmacArray[hmacArray.length - 1] & 15;
+  const truncatedHash = hmacArray.slice(offset, offset + 4);
+  const otpValue = new DataView(new Uint8Array(truncatedHash).buffer).getUint32(0) & 0x7fffffff;
+  return (otpValue % 1e6).toString().padStart(6, "0");
+}
+
+function base32toByteArray(base32) {
+  const charTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const base32Chars = base32.toUpperCase().replace(/=+$/, '').split("");
+  const bits = base32Chars.map(c => {
+    const i = charTable.indexOf(c);
+    return (i === -1 ? "00000" : i.toString(2).padStart(5, "0"));
+  }).join("");
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) { bytes.push(parseInt(bits.slice(i, i + 8), 2)); }
+  return new Uint8Array(bytes);
 }

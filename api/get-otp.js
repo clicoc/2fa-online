@@ -33,6 +33,9 @@ export default async function handler(request) {
       <meta property="og:title" content="2FA Authenticator - 安全便捷的在线2FA验证器">
       <meta property="og:type" content="website">
       <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+      <link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4361ee">
+<link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/512x512/1f6e1.png">
       <style>
         :root { --primary: #4361ee; --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-gradient); height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; color: #2d3436; overflow: hidden; }
@@ -136,6 +139,12 @@ export default async function handler(request) {
           };
         }
       </script>
+      // 在现有 script 的最顶部或最底部添加
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+  });
+}
     </body>
     </html>`;
 

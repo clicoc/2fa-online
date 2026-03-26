@@ -4,17 +4,31 @@ export const config = {
 
 export default async function handler(request) {
   const url = new URL(request.url);
+  const method = request.method;
+
+  // 获取 Secret 的逻辑：支持路径、查询参数、或者 POST 表单
   let secret = url.searchParams.get('secret') || url.pathname.split('/').pop();
+  
+  if (method === "POST") {
+    const formData = await request.formData();
+    secret = formData.get("secret");
+  }
 
   if (secret) {
     secret = decodeURIComponent(secret).replace(/\s+/g, '');
   }
 
-  if (!secret || secret === 'get-otp') {
-    return new Response("Missing or invalid secret parameter", { status: 400 });
+  // 计算 OTP（如果有 secret）
+  let otp = "";
+  if (secret && secret !== 'get-otp' && secret !== '/') {
+    try {
+      otp = await generateOTP(secret);
+    } catch (e) {
+      secret = ""; // 如果 Secret 非法导致报错，回退到输入界面
+    }
+  } else {
+    secret = ""; // 确保主页模式下 secret 为空
   }
-
-  const otp = await generateOTP(secret);
 
   const htmlContent = `<!DOCTYPE html>
     <html lang="zh-CN">
@@ -27,6 +41,13 @@ export default async function handler(request) {
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-gradient); height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; color: #2d3436; overflow: hidden; }
         .container { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); padding: 2.5rem; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); width: 90%; max-width: 400px; text-align: center; }
         h1 { font-size: 1.1rem; margin-bottom: 1.5rem; color: #636e72; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* 输入框样式 */
+        input[type="text"] { width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #dfe6e9; border-radius: 12px; font-size: 1rem; box-sizing: border-box; outline: none; transition: border-color 0.3s; }
+        input[type="text"]:focus { border-color: var(--primary); }
+        button { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 12px; font-size: 1rem; cursor: pointer; width: 100%; transition: opacity 0.3s; font-weight: 600; }
+        button:hover { opacity: 0.9; }
+
         .otp-display { font-size: 3.5rem; font-weight: 800; color: var(--primary); margin: 1rem 0; cursor: pointer; transition: transform 0.2s; letter-spacing: 4px; font-variant-numeric: tabular-nums; }
         .otp-display:active { transform: scale(0.95); }
         .progress-container { height: 8px; background: #dfe6e9; border-radius: 4px; margin: 1.5rem 0; overflow: hidden; position: relative; }
@@ -38,63 +59,60 @@ export default async function handler(request) {
     </head>
     <body>
       <div class="container">
-        <h1 id="title">Verification Code</h1>
-        <div class="otp-display" id="otp" title="点击复制">${otp}</div>
-        <div class="progress-container"><div id="progress-bar"></div></div>
-        <p id="expiry-text" style="font-size: 0.95rem; font-weight: 500;">
-          <span id="label-text">Expiring in</span> <span id="timer" style="color:#e74c3c">30</span>s
-        </p>
-        <div class="info">Secret: ${secret}</div>
+        <h1 id="title">2FA Authenticator</h1>
+        
+        ${!otp ? `
+          <form method="POST">
+            <input type="text" name="secret" placeholder="Paste Secret here..." required autocomplete="off">
+            <button type="submit" id="btn-text">Generate Code</button>
+          </form>
+        ` : `
+          <div class="otp-display" id="otp" title="点击复制">${otp}</div>
+          <div class="progress-container"><div id="progress-bar"></div></div>
+          <p id="expiry-text" style="font-size: 0.95rem; font-weight: 500;">
+            <span id="label-text">Expiring in</span> <span id="timer" style="color:#e74c3c">30</span>s
+          </p>
+          <div class="info">Secret: ${secret}</div>
+          <button onclick="location.href='/'" style="margin-top:10px; background:#636e72; font-size:0.8rem; padding:8px;">Back</button>
+        `}
       </div>
       <div id="toast" class="toast">Copied!</div>
 
       <script>
         const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
         const i18n = {
-          zh: { title: '您的验证码', label: '将在', suffix: '秒后过期', toast: '已复制到剪贴板' },
-          en: { title: 'Your Code', label: 'Expiring in', suffix: 's', toast: 'Copied to clipboard' }
+          zh: { title: '2FA 验证器', btn: '生成验证码', placeholder: '在此粘贴密钥...', label: '将在', suffix: '秒后过期', toast: '已复制到剪贴板', back: '返回' },
+          en: { title: '2FA Authenticator', btn: 'Generate Code', placeholder: 'Paste Secret here...', label: 'Expiring in', suffix: 's', toast: 'Copied to clipboard', back: 'Back' }
         };
 
-        // 初始化语言
+        // 设置语言
         document.getElementById('title').innerText = i18n[lang].title;
-        document.getElementById('label-text').innerText = i18n[lang].label;
+        if(document.getElementById('btn-text')) document.getElementById('btn-text').innerText = i18n[lang].btn;
+        if(document.getElementsByName('secret')[0]) document.getElementsByName('secret')[0].placeholder = i18n[lang].placeholder;
 
-        function update() {
-          const now = Math.floor(Date.now() / 1000);
-          const step = 30;
-          const timeLeft = step - (now % step);
-          
-          const timerEl = document.getElementById('timer');
-          const progressEl = document.getElementById('progress-bar');
-          
-          timerEl.innerText = timeLeft;
-          // 倒计时文字逻辑，加上单位
-          timerEl.nextSibling.textContent = i18n[lang].suffix;
-
-          // 进度条百分比
-          const percentage = (timeLeft / step) * 100;
-          progressEl.style.width = percentage + '%';
-
-          // 当倒计时刚好归零（即进入下一个30秒）时，自动刷新页面获取新OTP
-          if (timeLeft === step) {
-             location.reload();
+        const otpEl = document.getElementById('otp');
+        if (otpEl) {
+          function update() {
+            const now = Math.floor(Date.now() / 1000);
+            const timeLeft = 30 - (now % 30);
+            document.getElementById('timer').innerText = timeLeft;
+            document.getElementById('label-text').innerText = i18n[lang].label;
+            document.getElementById('timer').nextSibling.textContent = i18n[lang].suffix;
+            document.getElementById('progress-bar').style.width = (timeLeft / 30 * 100) + '%';
+            if (timeLeft === 30) location.reload();
           }
+          setInterval(update, 1000);
+          update();
+
+          otpEl.onclick = function() {
+            navigator.clipboard.writeText(this.innerText).then(() => {
+              const toast = document.getElementById('toast');
+              toast.innerText = i18n[lang].toast;
+              toast.style.display = 'block';
+              setTimeout(() => toast.style.display = 'none', 2000);
+            });
+          };
         }
-
-        // 每1秒执行一次倒计时更新
-        setInterval(update, 1000);
-        update(); // 立即执行一次避免延迟
-
-        // 点击复制功能
-        document.getElementById('otp').onclick = function() {
-          const text = this.innerText;
-          navigator.clipboard.writeText(text).then(() => {
-            const toast = document.getElementById('toast');
-            toast.innerText = i18n[lang].toast;
-            toast.style.display = 'block';
-            setTimeout(() => { toast.style.display = 'none'; }, 2000);
-          });
-        };
       </script>
     </body>
     </html>`;
@@ -102,47 +120,35 @@ export default async function handler(request) {
   return new Response(htmlContent, {
     headers: { 
       "Content-Type": "text/html; charset=UTF-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate", // 禁用缓存
+      "Cache-Control": "no-store" 
     },
   });
 }
 
-// --- TOTP 核心算法函数（保持不变） ---
+// --- TOTP 核心算法 (保持不变) ---
 async function generateOTP(secret) {
   const epochTime = Math.floor(Date.now() / 1000);
   const timeStep = 30;
   let counter = Math.floor(epochTime / timeStep);
   const counterBytes = new Uint8Array(8);
-  for (let i = 7; i >= 0; i--) {
-    counterBytes[i] = counter & 255;
-    counter >>>= 8;
-  }
-  const key = await crypto.subtle.importKey(
-    "raw",
-    base32toByteArray(secret),
-    { name: "HMAC", hash: { name: "SHA-1" } },
-    false,
-    ["sign"]
-  );
+  for (let i = 7; i >= 0; i--) { counterBytes[i] = counter & 255; counter >>>= 8; }
+  const key = await crypto.subtle.importKey("raw", base32toByteArray(secret), { name: "HMAC", hash: { name: "SHA-1" } }, false, ["sign"]);
   const hmacBuffer = await crypto.subtle.sign("HMAC", key, counterBytes.buffer);
   const hmacArray = Array.from(new Uint8Array(hmacBuffer));
   const offset = hmacArray[hmacArray.length - 1] & 15;
   const truncatedHash = hmacArray.slice(offset, offset + 4);
-  const otpValue = new DataView(new Uint8Array(truncatedHash).buffer).getUint32(0) & 2147483647;
+  const otpValue = new DataView(new Uint8Array(truncatedHash).buffer).getUint32(0) & 0x7fffffff;
   return (otpValue % 1e6).toString().padStart(6, "0");
 }
 
 function base32toByteArray(base32) {
   const charTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  const base32Chars = base32.toUpperCase().split("");
-  const bits = base32Chars.map((char) => {
-    const idx = charTable.indexOf(char);
-    if (idx === -1) return "00000";
-    return idx.toString(2).padStart(5, "0");
+  const base32Chars = base32.toUpperCase().replace(/=+$/, '').split("");
+  const bits = base32Chars.map(c => {
+    const i = charTable.indexOf(c);
+    return (i === -1 ? "00000" : i.toString(2).padStart(5, "0"));
   }).join("");
   const bytes = [];
-  for (let i = 0; i < bits.length; i += 8) {
-    bytes.push(parseInt(bits.slice(i, i + 8), 2));
-  }
+  for (let i = 0; i + 8 <= bits.length; i += 8) { bytes.push(parseInt(bits.slice(i, i + 8), 2)); }
   return new Uint8Array(bytes);
 }

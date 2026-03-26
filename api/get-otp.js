@@ -138,13 +138,13 @@ export default async function handler(request) {
             });
           };
         }
-      </script>
-      // 在现有 script 的最顶部或最底部添加
+ // 在现有 script 的最顶部或最底部添加
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
   });
 }
+      </script>
     </body>
     </html>`;
 

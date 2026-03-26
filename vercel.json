@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/bulk",
+      "destination": "/api/bulk-otp.js"
+    },
+    {
       "source": "/:secret",
       "destination": "/api/get-otp?secret=:secret"
     },

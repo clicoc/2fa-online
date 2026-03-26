@@ -165,4 +165,25 @@ async function generateOTP(secret) {
     false,
     ["sign"]
   );
-  const hmacBuffer = await crypto.subtle.sign("
+  const hmacBuffer = await crypto.subtle.sign("HMAC", key, counterBytes.buffer);
+  const hmacArray = Array.from(new Uint8Array(hmacBuffer));
+  const offset = hmacArray[hmacArray.length - 1] & 15;
+  const truncatedHash = hmacArray.slice(offset, offset + 4);
+  const otpValue = new DataView(new Uint8Array(truncatedHash).buffer).getUint32(0) & 2147483647;
+  return (otpValue % 1e6).toString().padStart(6, "0");
+}
+
+function base32toByteArray(base32) {
+  const charTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const base32Chars = base32.toUpperCase().split("");
+  const bits = base32Chars.map((char) => {
+    const idx = charTable.indexOf(char);
+    if (idx === -1) return "00000";
+    return idx.toString(2).padStart(5, "0");
+  }).join("");
+  const bytes = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  }
+  return new Uint8Array(bytes);
+}

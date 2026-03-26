@@ -20,7 +20,6 @@ export default async function handler(request) {
     secret = decodeURIComponent(secret).trim().replace(/\s+/g, '');
   }
 
-  // 判定是否为结果页
   const isResultPage = !!(secret && !['get-otp', '/', 'favicon.ico', 'bulk'].includes(secret.toLowerCase()));
 
   const htmlContent = `<!DOCTYPE html>
@@ -28,7 +27,12 @@ export default async function handler(request) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>2FA Authenticator</title>
+      <title>2FA Authenticator | 在线双重身份验证器</title>
+      <meta name="description" content="安全、私密的在线 2FA 验证器。支持 Google Authenticator 密钥，纯本地计算，无刷新自动更新。">
+      <meta name="keywords" content="2FA, OTP, 验证码生成器, 在线OTP, 身份验证器">
+      <meta property="og:title" content="2FA Authenticator - 安全便捷的在线验证器">
+      <meta property="og:type" content="website">
+      <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
       <style>
         :root { --primary: #4361ee; --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-gradient); height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; color: #2d3436; overflow: hidden; }
@@ -57,7 +61,7 @@ export default async function handler(request) {
           </form>
           <div class="nav-links"><a href="/bulk" class="sub-link" id="bulk-entry">Bulk Mode</a></div>
         ` : `
-          <div class="otp-display" id="otp" title="点击复制">------</div>
+          <div class="otp-display" id="otp">------</div>
           <div class="progress-container"><div id="progress-bar"></div></div>
           <p style="font-size: 0.9rem; font-weight: 500; margin:0;">
             <span id="label-text">Expiring in</span> <span id="timer" style="color:#e74c3c">30</span>s
@@ -72,38 +76,29 @@ export default async function handler(request) {
         `}
       </div>
       <div id="toast" class="toast">Copied!</div>
-
       <script>
-        // 1. 国际化配置
         const lang = navigator.language.startsWith('zh') ? 'zh' : 'en';
         const i18n = {
-          zh: { title: '2FA 验证器', btn: '生成验证码', placeholder: '在此粘贴密钥...', label: '将在', suffix: '秒后过期', toast: '已复制', back: '← 输入新密钥', bulk: '批量模式' },
-          en: { title: '2FA Authenticator', btn: 'Generate Code', placeholder: 'Paste Secret here...', label: 'Expiring in', suffix: 's', toast: 'Copied', back: '← New Secret', bulk: 'Bulk Mode' }
+          zh: { title:'2FA 验证器', btn:'生成验证码', placeholder:'在此粘贴密钥...', label:'将在', suffix:'秒后过期', toast:'已复制', back:'← 输入新密钥', bulk:'批量模式' },
+          en: { title:'2FA Authenticator', btn:'Generate Code', placeholder:'Paste Secret here...', label:'Expiring in', suffix:'s', toast:'Copied', back:'← New Secret', bulk:'Bulk Mode' }
         };
-
         const updateUI = (id, text) => { const el = document.getElementById(id); if(el) el.innerText = text; };
-        updateUI('title', i18n[lang].title);
-        updateUI('btn-text', i18n[lang].btn);
+        updateUI('title', i18n[lang].title); updateUI('btn-text', i18n[lang].btn);
         if(document.getElementsByName('secret')[0]) document.getElementsByName('secret')[0].placeholder = i18n[lang].placeholder;
-        updateUI('back-text', i18n[lang].back);
-        updateUI('bulk-entry', i18n[lang].bulk);
-        updateUI('bulk-entry2', i18n[lang].bulk);
+        updateUI('back-text', i18n[lang].back); updateUI('bulk-entry', i18n[lang].bulk); updateUI('bulk-entry2', i18n[lang].bulk);
 
-        // 2. 核心 TOTP 算法 (前端版)
         const secret = "${secret}";
-        
-        function base32toBuf(base32) {
+        function base32toBuf(b32) {
           const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
           let bits = "";
-          for (let i = 0; i < base32.length; i++) {
-            const val = alphabet.indexOf(base32.charAt(i).toUpperCase());
+          for (let i = 0; i < b32.length; i++) {
+            const val = alphabet.indexOf(b32.charAt(i).toUpperCase());
             if (val >= 0) bits += val.toString(2).padStart(5, '0');
           }
           const buf = new Uint8Array(Math.floor(bits.length / 8));
           for (let i = 0; i < buf.length; i++) buf[i] = parseInt(bits.substr(i * 8, 8), 2);
           return buf;
         }
-
         async function getOTP(keyStr) {
           try {
             const epoch = Math.floor(Date.now() / 1000);
@@ -111,7 +106,6 @@ export default async function handler(request) {
             const packet = new Uint8Array(8);
             let c = BigInt(counter);
             for (let i = 7; i >= 0; i--) { packet[i] = Number(c & 0xffn); c >>= 8n; }
-
             const keyBuf = base32toBuf(keyStr);
             const cryptoKey = await window.crypto.subtle.importKey("raw", keyBuf, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
             const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, packet);
@@ -121,34 +115,23 @@ export default async function handler(request) {
             return (code % 1000000).toString().padStart(6, '0');
           } catch (e) { return "ERROR"; }
         }
-
-        // 3. 循环刷新逻辑
         const otpEl = document.getElementById('otp');
         if (otpEl && secret) {
           async function tick() {
             const now = Math.floor(Date.now() / 1000);
             const timeLeft = 30 - (now % 30);
-            
-            // 只有在时间跳变或初始时更新验证码
-            if (timeLeft === 30 || otpEl.innerText === "------") {
-              otpEl.innerText = await getOTP(secret);
-            }
-
+            if (timeLeft === 30 || otpEl.innerText === "------") otpEl.innerText = await getOTP(secret);
             document.getElementById('timer').innerText = timeLeft;
             document.getElementById('label-text').innerText = i18n[lang].label;
             document.getElementById('timer').nextSibling.textContent = i18n[lang].suffix;
             document.getElementById('progress-bar').style.width = (timeLeft / 30 * 100) + '%';
           }
-
-          setInterval(tick, 1000);
-          tick();
-
+          setInterval(tick, 1000); tick();
           otpEl.onclick = function() {
             navigator.clipboard.writeText(this.innerText).then(() => {
-              const toast = document.getElementById('toast');
-              toast.innerText = i18n[lang].toast + ": " + this.innerText;
-              toast.style.display = 'block';
-              setTimeout(() => toast.style.display = 'none', 2000);
+              const t = document.getElementById('toast');
+              t.innerText = i18n[lang].toast + ": " + this.innerText;
+              t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 2000);
             });
           };
         }
@@ -156,7 +139,5 @@ export default async function handler(request) {
     </body>
     </html>`;
 
-  return new Response(htmlContent, {
-    headers: { "Content-Type": "text/html; charset=UTF-8" },
-  });
+  return new Response(htmlContent, { headers: { "Content-Type": "text/html; charset=UTF-8" } });
 }

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Allow: /bulk
+Disallow: /get-otp

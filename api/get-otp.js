@@ -27,10 +27,10 @@ export default async function handler(request) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>2FA Authenticator | 在线双重身份验证器</title>
-      <meta name="description" content="安全、私密的在线 2FA 验证器。支持 Google Authenticator 密钥，纯本地计算，无刷新自动更新。">
-      <meta name="keywords" content="2FA, OTP, 验证码生成器, 在线OTP, 身份验证器">
-      <meta property="og:title" content="2FA Authenticator - 安全便捷的在线验证器">
+      <title>2FA Authenticator | 在线2FA双重身份验证码获取</title>
+      <meta name="description" content="安全、私密的在线2FA 验证器。Google Authenticator身份验证器网页版，纯本地计算，无刷新自动更新。">
+      <meta name="keywords" content="2FA验证器在线, 谷歌身份验证器网页版, 2FA验证码生成">
+      <meta property="og:title" content="2FA Authenticator - 安全便捷的在线2FA验证器">
       <meta property="og:type" content="website">
       <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
       <style>

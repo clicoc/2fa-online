@@ -3,6 +3,10 @@
     {
       "source": "/:secret",
       "destination": "/api/get-otp?secret=:secret"
+    },
+    {
+      "source": "/",
+      "destination": "/api/get-otp"
     }
   ]
 }

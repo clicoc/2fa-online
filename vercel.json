@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/:secret",
+      "destination": "/api/get-otp?secret=:secret"
+    }
+  ]
+}

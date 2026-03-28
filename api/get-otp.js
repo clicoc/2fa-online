@@ -29,13 +29,6 @@ export default async function handler(request) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>2FA Authenticator | 在线2FA双重身份验证码获取</title>
       <meta name="description" content="安全、私密的在线2FA 验证器。Google Authenticator身份验证器网页版，纯本地计算，无刷新自动更新。">
-      <meta name="keywords" content="2FA验证器在线, 谷歌身份验证器网页版, 2FA验证码生成">
-      <meta property="og:title" content="2FA Authenticator - 安全便捷的在线2FA验证器">
-      <meta property="og:type" content="website">
-      <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
-      <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#4361ee">
-<link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/512x512/1f6e1.png">
       <style>
         :root { --primary: #4361ee; --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-gradient); height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; color: #2d3436; overflow: hidden; }
@@ -43,14 +36,22 @@ export default async function handler(request) {
         h1 { font-size: 1.1rem; margin-bottom: 1.5rem; color: #636e72; text-transform: uppercase; letter-spacing: 1px; }
         input[type="text"] { width: 100%; padding: 14px; margin-bottom: 15px; border: 2px solid #dfe6e9; border-radius: 12px; font-size: 1rem; box-sizing: border-box; outline: none; transition: all 0.3s; background: rgba(255,255,255,0.5); }
         input[type="text"]:focus { border-color: var(--primary); background: white; }
-        .btn-submit { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 12px; font-size: 1rem; cursor: pointer; width: 100%; font-weight: 600; transition: transform 0.2s, opacity 0.3s; }
+        
+        /* 按钮基础样式 */
+        .btn-submit, .btn-secondary { border: none; padding: 12px; border-radius: 12px; font-size: 0.9rem; cursor: pointer; font-weight: 600; transition: all 0.2s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+        
+        .btn-submit { background: var(--primary); color: white; width: 100%; margin-bottom: 10px; }
+        .btn-submit:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* 底部辅助按钮组 */
+        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-secondary { background: #f1f2f6; color: #57606f; flex: 1; font-size: 0.8rem; border: 1px solid #dfe6e9; }
+        .btn-secondary:hover { background: #dfe4ea; color: var(--primary); }
+
         .otp-display { font-size: 3.5rem; font-weight: 800; color: var(--primary); margin: 0.5rem 0; cursor: pointer; transition: transform 0.2s; letter-spacing: 4px; font-variant-numeric: tabular-nums; }
         .progress-container { height: 8px; background: #dfe6e9; border-radius: 4px; margin: 1.5rem 0; overflow: hidden; }
         #progress-bar { height: 100%; background: var(--primary); width: 100%; transition: width 1s linear; }
         .footer-info { font-size: 0.7rem; color: #b2bec3; margin-top: 1.5rem; word-break: break-all; opacity: 0.7; }
-        .nav-links { margin-top: 12px; border-top: 1px dashed #dfe6e9; padding-top: 12px; }
-        .sub-link { color: #999; text-decoration: none; font-size: 0.8rem; transition: color 0.3s; opacity: 0.8; margin: 0 8px; }
-        .sub-link:hover { color: var(--primary); opacity: 1; }
         .toast { position: fixed; bottom: 30px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 25px; font-size: 0.85rem; display: none; z-index: 100; }
       </style>
     </head>
@@ -62,7 +63,9 @@ export default async function handler(request) {
             <input type="text" name="secret" placeholder="Paste Secret here..." required autocomplete="off">
             <button type="submit" class="btn-submit" id="btn-text">Generate Code</button>
           </form>
-          <div class="nav-links"><a href="/bulk" class="sub-link" id="bulk-entry">Bulk Mode</a></div>
+          <div class="btn-group">
+            <a href="/bulk" class="btn-secondary" id="bulk-entry">Bulk Mode</a>
+          </div>
         ` : `
           <div class="otp-display" id="otp">------</div>
           <div class="progress-container"><div id="progress-bar"></div></div>
@@ -71,9 +74,9 @@ export default async function handler(request) {
           </p>
           <div class="footer-info">
             Secret: ${secret}
-            <div class="nav-links">
-              <a href="/" class="sub-link" id="back-text">← New Secret</a>
-              <a href="/bulk" class="sub-link" id="bulk-entry2">Bulk Mode</a>
+            <div class="btn-group">
+              <a href="/" class="btn-secondary" id="back-text">← New Secret</a>
+              <a href="/bulk" class="btn-secondary" id="bulk-entry2">Bulk Mode</a>
             </div>
           </div>
         `}
@@ -86,9 +89,12 @@ export default async function handler(request) {
           en: { title:'2FA Authenticator', btn:'Generate Code', placeholder:'Paste Secret here...', label:'Expiring in', suffix:'s', toast:'Copied', back:'← New Secret', bulk:'Bulk Mode' }
         };
         const updateUI = (id, text) => { const el = document.getElementById(id); if(el) el.innerText = text; };
-        updateUI('title', i18n[lang].title); updateUI('btn-text', i18n[lang].btn);
+        updateUI('title', i18n[lang].title); 
+        updateUI('btn-text', i18n[lang].btn);
         if(document.getElementsByName('secret')[0]) document.getElementsByName('secret')[0].placeholder = i18n[lang].placeholder;
-        updateUI('back-text', i18n[lang].back); updateUI('bulk-entry', i18n[lang].bulk); updateUI('bulk-entry2', i18n[lang].bulk);
+        updateUI('back-text', i18n[lang].back); 
+        updateUI('bulk-entry', i18n[lang].bulk); 
+        updateUI('bulk-entry2', i18n[lang].bulk);
 
         const secret = "${secret}";
         function base32toBuf(b32) {
@@ -138,12 +144,12 @@ export default async function handler(request) {
             });
           };
         }
- // 在现有 script 的最顶部或最底部添加
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
-  });
-}
+
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+          });
+        }
       </script>
     </body>
     </html>`;

@@ -49,7 +49,7 @@ export default async function handler(request) {
         #progress-bar { height: 100%; background: var(--primary); width: 100%; transition: width 1s linear; }
         .footer-info { font-size: 0.7rem; color: #b2bec3; margin-top: 1.5rem; word-break: break-all; opacity: 0.7; }
         .nav-links { margin-top: 12px; border-top: 1px dashed #dfe6e9; padding-top: 12px; }
-        .sub-link { color: #b2bec3; text-decoration: none; font-size: 0.7rem; transition: color 0.3s; opacity: 0.6; margin: 0 8px; }
+        .sub-link { color: #000; text-decoration: none; font-size: 0.7rem; transition: color 0.3s; opacity: 0.6; margin: 0 8px; }
         .sub-link:hover { color: var(--primary); opacity: 1; }
         .toast { position: fixed; bottom: 30px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 25px; font-size: 0.85rem; display: none; z-index: 100; }
       </style>
